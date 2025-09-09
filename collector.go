@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -23,6 +24,35 @@ var (
 	)
 )
 
+// collectorMetrics holds the metrics for HTTP request collection.
+type collectorMetrics struct {
+	requestsCounter   CounterMetricLabeled[requestLabels]
+	inflightGauge     GaugeMetricLabeled[inflightLabels]
+	requestsHistogram HistogramMetricLabeled[histogramLabels]
+}
+
+// newCollectorMetrics creates a new set of collector metrics using the specified registry.
+func newCollectorMetrics(registry *prometheus.Registry) *collectorMetrics {
+	return &collectorMetrics{
+		requestsCounter: CounterWithRegistryWith[requestLabels](
+			registry,
+			"http_requests_total",
+			"Total number of incoming HTTP requests.",
+		),
+		inflightGauge: GaugeWithRegistryWith[inflightLabels](
+			registry,
+			"http_requests_inflight", 
+			"Number of incoming HTTP requests currently in flight.",
+		),
+		requestsHistogram: HistogramWithRegistryWith[histogramLabels](
+			registry,
+			"http_request_duration_seconds",
+			"Response latency in seconds for completed incoming HTTP requests.",
+			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
+		),
+	}
+}
+
 // CollectorOpts configures the HTTP request metrics collector.
 type CollectorOpts struct {
 	// Host enables tracking of request "host" label.
@@ -30,6 +60,10 @@ type CollectorOpts struct {
 
 	// Proto enables tracking of request "proto" label (e.g. "HTTP/2", "HTTP/1.1 WebSocket").
 	Proto bool
+
+	// Registry specifies a custom Prometheus registry to use for metrics.
+	// If nil, the default global registry will be used.
+	Registry *prometheus.Registry
 
 	// Skip is an optional predicate function that determines whether to skip recording metrics for a given request.
 	// If nil, all requests are recorded. If provided, requests where Skip returns true will not be recorded.
@@ -63,6 +97,12 @@ type inflightLabels struct {
 // - http_requests_inflight: Number of incoming HTTP requests currently in flight
 // - http_request_duration_seconds: Response latency in seconds for completed requests
 func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
+	// If a custom registry is specified, create metrics for that registry
+	var metrics *collectorMetrics
+	if opts.Registry != nil {
+		metrics = newCollectorMetrics(opts.Registry)
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if opts.Skip != nil && opts.Skip(r) {
@@ -76,7 +116,13 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 				Host:  getHost(r, opts.Host),
 				Proto: getProto(r, opts.Proto),
 			}
-			inflightGauge.Inc(inflightLabels)
+			
+			// Use custom metrics if available, otherwise use global metrics
+			if metrics != nil {
+				metrics.inflightGauge.Inc(inflightLabels)
+			} else {
+				inflightGauge.Inc(inflightLabels)
+			}
 
 			ww, ok := w.(middleware.WrapResponseWriter)
 			if !ok {
@@ -85,7 +131,13 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 
 			defer func() {
 				duration := time.Since(start).Seconds()
-				inflightGauge.Dec(inflightLabels)
+				
+				// Decrement inflight counter
+				if metrics != nil {
+					metrics.inflightGauge.Dec(inflightLabels)
+				} else {
+					inflightGauge.Dec(inflightLabels)
+				}
 
 				endpoint := "<no-match>"
 				if rctx := chi.RouteContext(r.Context()); rctx != nil {
@@ -112,14 +164,23 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 					labels.ClientAborted = "true"
 				} else {
 					// Observe duration of completed requests.
-					requestsHistogram.Observe(duration, histogramLabels{
+					histLabels := histogramLabels{
 						Status:   labels.Status,
 						Endpoint: labels.Endpoint,
-					})
+					}
+					if metrics != nil {
+						metrics.requestsHistogram.Observe(duration, histLabels)
+					} else {
+						requestsHistogram.Observe(duration, histLabels)
+					}
 				}
 
 				// Track total number of requests.
-				requestsCounter.Inc(labels)
+				if metrics != nil {
+					metrics.requestsCounter.Inc(labels)
+				} else {
+					requestsCounter.Inc(labels)
+				}
 			}()
 
 			next.ServeHTTP(ww, r)

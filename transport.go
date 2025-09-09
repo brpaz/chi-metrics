@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var (
@@ -18,12 +20,45 @@ var (
 	)
 )
 
+// transportMetrics holds the metrics for HTTP client request collection.
+type transportMetrics struct {
+	clientRequestsCounter  CounterMetricLabeled[outgoingRequestLabels]
+	clientInflightGauge    GaugeMetricLabeled[outgoingInflightLabels]
+	clientRequestHistogram HistogramMetricLabeled[outgoingRequestLabels]
+}
+
+// newTransportMetrics creates a new set of transport metrics using the specified registry.
+func newTransportMetrics(registry *prometheus.Registry) *transportMetrics {
+	return &transportMetrics{
+		clientRequestsCounter: CounterWithRegistryWith[outgoingRequestLabels](
+			registry,
+			"http_client_requests_total",
+			"Total number of outgoing HTTP requests.",
+		),
+		clientInflightGauge: GaugeWithRegistryWith[outgoingInflightLabels](
+			registry,
+			"http_client_requests_inflight",
+			"Number of outgoing HTTP requests currently in flight.",
+		),
+		clientRequestHistogram: HistogramWithRegistryWith[outgoingRequestLabels](
+			registry,
+			"http_client_request_duration_seconds",
+			"Response latency in seconds for completed outgoing HTTP requests.",
+			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
+		),
+	}
+}
+
 // TransportOpts configures the HTTP client metrics transport.
 type TransportOpts struct {
 	// Host adds the request host as a "host" label to http_client_requests_total metric.
 	// WARNING: High cardinality risk - only enable for limited, known hosts. Do not enable
 	// for user-input URLs, crawlers, or dynamically generated hosts.
 	Host bool
+
+	// Registry specifies a custom Prometheus registry to use for metrics.
+	// If nil, the default global registry will be used.
+	Registry *prometheus.Registry
 }
 
 // outgoingRequestLabels defines labels for the counter of total outgoing HTTP requests.
@@ -43,6 +78,12 @@ type outgoingInflightLabels struct {
 // - http_client_requests_inflight: Number of outgoing HTTP requests currently in flight
 // - http_client_request_duration_seconds: Response latency in seconds for completed requests
 func Transport(opts TransportOpts) func(http.RoundTripper) http.RoundTripper {
+	// If a custom registry is specified, create metrics for that registry
+	var metrics *transportMetrics
+	if opts.Registry != nil {
+		metrics = newTransportMetrics(opts.Registry)
+	}
+
 	return func(next http.RoundTripper) http.RoundTripper {
 		return roundTripperFunc(func(req *http.Request) (resp *http.Response, err error) {
 			startTime := time.Now().UTC()
@@ -54,12 +95,20 @@ func Transport(opts TransportOpts) func(http.RoundTripper) http.RoundTripper {
 			}
 
 			// Increment inflight counter
-			clientInflightGauge.Inc(inflightLabels)
+			if metrics != nil {
+				metrics.clientInflightGauge.Inc(inflightLabels)
+			} else {
+				clientInflightGauge.Inc(inflightLabels)
+			}
 
 			// Defer recording metrics after the request is complete
 			defer func() {
 				// Decrement inflight counter
-				clientInflightGauge.Dec(inflightLabels)
+				if metrics != nil {
+					metrics.clientInflightGauge.Dec(inflightLabels)
+				} else {
+					clientInflightGauge.Dec(inflightLabels)
+				}
 
 				// Create labels based on enabled options
 				labels := outgoingRequestLabels{}
@@ -80,12 +129,20 @@ func Transport(opts TransportOpts) func(http.RoundTripper) http.RoundTripper {
 				}
 
 				// Track total number of requests.
-				clientRequestsCounter.Inc(labels)
+				if metrics != nil {
+					metrics.clientRequestsCounter.Inc(labels)
+				} else {
+					clientRequestsCounter.Inc(labels)
+				}
 
 				// Observe histogram of completed requests.
 				if resp != nil {
 					duration := time.Since(startTime).Seconds()
-					clientRequestHistogram.Observe(duration, labels)
+					if metrics != nil {
+						metrics.clientRequestHistogram.Observe(duration, labels)
+					} else {
+						clientRequestHistogram.Observe(duration, labels)
+					}
 				}
 			}()
 

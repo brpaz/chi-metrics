@@ -331,3 +331,161 @@ func TestBackwardsCompatibility(t *testing.T) {
 
 	t.Log("All backwards compatibility tests passed")
 }
+
+func TestCustomRegistryCollector(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	
+	// Create a collector with custom registry
+	collector := Collector(CollectorOpts{
+		Registry: registry,
+		Host:     true,
+		Proto:    true,
+	})
+
+	// Create a test handler
+	handler := collector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("test response"))
+	}))
+
+	// Make a request
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Host = "example.com"
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// Check metrics are in the custom registry
+	metricFamilies, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("Failed to gather metrics: %v", err)
+	}
+
+	// Should have metrics: requests_total, request_duration_seconds, and possibly inflight
+	if len(metricFamilies) < 2 {
+		t.Errorf("Expected at least 2 metric families, got %d", len(metricFamilies))
+	}
+
+	metricNames := make(map[string]bool)
+	for _, mf := range metricFamilies {
+		metricNames[*mf.Name] = true
+		t.Logf("Found metric: %s", *mf.Name)
+	}
+
+	if !metricNames["http_requests_total"] {
+		t.Error("Expected http_requests_total metric")
+	}
+	if !metricNames["http_request_duration_seconds"] {
+		t.Error("Expected http_request_duration_seconds metric")
+	}
+}
+
+func TestCustomRegistryTransport(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("server response"))
+	}))
+	defer server.Close()
+
+	// Create transport with custom registry
+	transport := Transport(TransportOpts{
+		Registry: registry,
+		Host:     true,
+	})
+
+	// Create client with custom transport
+	client := &http.Client{
+		Transport: transport(http.DefaultTransport),
+	}
+
+	// Make a request
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	// Check metrics are in the custom registry
+	metricFamilies, err := registry.Gather()
+	if err != nil {
+		t.Fatalf("Failed to gather metrics: %v", err)
+	}
+
+	// Should have metrics: client_requests_total, client_request_duration_seconds, and possibly inflight
+	if len(metricFamilies) < 2 {
+		t.Errorf("Expected at least 2 metric families, got %d", len(metricFamilies))
+	}
+
+	metricNames := make(map[string]bool)
+	for _, mf := range metricFamilies {
+		metricNames[*mf.Name] = true
+		t.Logf("Found metric: %s", *mf.Name)
+	}
+
+	if !metricNames["http_client_requests_total"] {
+		t.Error("Expected http_client_requests_total metric")
+	}
+	if !metricNames["http_client_request_duration_seconds"] {
+		t.Error("Expected http_client_request_duration_seconds metric")
+	}
+}
+
+func TestCollectorWithNilRegistry(t *testing.T) {
+	// Test that collector with nil registry works like the original
+	collector := Collector(CollectorOpts{
+		Registry: nil,
+		Host:     false,
+		Proto:    false,
+	})
+
+	// Create a test handler
+	handler := collector(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("test response"))
+	}))
+
+	// Make a request
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	// Should not panic and should complete successfully
+	if w.Result().StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", w.Result().StatusCode)
+	}
+}
+
+func TestTransportWithNilRegistry(t *testing.T) {
+	// Test that transport with nil registry works like the original
+	
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("server response"))
+	}))
+	defer server.Close()
+
+	// Create transport with nil registry
+	transport := Transport(TransportOpts{
+		Registry: nil,
+		Host:     false,
+	})
+
+	// Create client with custom transport
+	client := &http.Client{
+		Transport: transport(http.DefaultTransport),
+	}
+
+	// Make a request - should not panic
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("Request failed: %v", err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
