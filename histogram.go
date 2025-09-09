@@ -2,25 +2,47 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Histogram creates a histogram metric
+// Histogram creates a histogram metric using the default registry
 func Histogram(name, help string, buckets []float64) HistogramMetric {
+	return HistogramWithRegistry(nil, name, help, buckets)
+}
+
+// HistogramWith creates a histogram metric with typed labels using the default registry
+func HistogramWith[T any](name, help string, buckets []float64) HistogramMetricLabeled[T] {
+	return HistogramWithRegistryWith[T](nil, name, help, buckets)
+}
+
+// HistogramWithRegistry creates a histogram metric using the specified registry.
+// If registry is nil, the default registry is used.
+func HistogramWithRegistry(registry *prometheus.Registry, name, help string, buckets []float64) HistogramMetric {
 	vec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    mustValidMetricName(name),
 		Help:    help,
 		Buckets: buckets,
 	}, []string{})
-	prometheus.MustRegister(vec)
+	
+	if registry != nil {
+		registry.MustRegister(vec)
+	} else {
+		prometheus.MustRegister(vec)
+	}
 	return HistogramMetric{vec: vec}
 }
 
-// HistogramWith creates a histogram metric with typed labels
-func HistogramWith[T any](name, help string, buckets []float64) HistogramMetricLabeled[T] {
+// HistogramWithRegistryWith creates a histogram metric with typed labels using the specified registry.
+// If registry is nil, the default registry is used.
+func HistogramWithRegistryWith[T any](registry *prometheus.Registry, name, help string, buckets []float64) HistogramMetricLabeled[T] {
 	vec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    mustValidMetricName(name),
 		Help:    help,
 		Buckets: buckets,
 	}, getLabelKeys[T]())
-	prometheus.MustRegister(vec)
+	
+	if registry != nil {
+		registry.MustRegister(vec)
+	} else {
+		prometheus.MustRegister(vec)
+	}
 	return HistogramMetricLabeled[T]{vec: vec}
 }
 

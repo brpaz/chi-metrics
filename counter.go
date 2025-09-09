@@ -2,23 +2,45 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-// Counter creates a counter metric
+// Counter creates a counter metric using the default registry
 func Counter(name string, help string) CounterMetric {
+	return CounterWithRegistry(nil, name, help)
+}
+
+// CounterWith creates a counter metric with typed labels using the default registry
+func CounterWith[T any](name string, help string) CounterMetricLabeled[T] {
+	return CounterWithRegistryWith[T](nil, name, help)
+}
+
+// CounterWithRegistry creates a counter metric using the specified registry.
+// If registry is nil, the default registry is used.
+func CounterWithRegistry(registry *prometheus.Registry, name string, help string) CounterMetric {
 	vec := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: mustValidMetricName(name),
 		Help: help,
 	}, []string{})
-	prometheus.MustRegister(vec)
+	
+	if registry != nil {
+		registry.MustRegister(vec)
+	} else {
+		prometheus.MustRegister(vec)
+	}
 	return CounterMetric{vec: vec}
 }
 
-// CounterWith creates a counter metric with typed labels
-func CounterWith[T any](name string, help string) CounterMetricLabeled[T] {
+// CounterWithRegistryWith creates a counter metric with typed labels using the specified registry.
+// If registry is nil, the default registry is used.
+func CounterWithRegistryWith[T any](registry *prometheus.Registry, name string, help string) CounterMetricLabeled[T] {
 	vec := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: mustValidMetricName(name),
 		Help: help,
 	}, getLabelKeys[T]())
-	prometheus.MustRegister(vec)
+	
+	if registry != nil {
+		registry.MustRegister(vec)
+	} else {
+		prometheus.MustRegister(vec)
+	}
 	return CounterMetricLabeled[T]{vec: vec}
 }
 
