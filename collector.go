@@ -24,34 +24,7 @@ var (
 	)
 )
 
-// collectorMetrics holds the metrics for HTTP request collection.
-type collectorMetrics struct {
-	requestsCounter   CounterMetricLabeled[requestLabels]
-	inflightGauge     GaugeMetricLabeled[inflightLabels]
-	requestsHistogram HistogramMetricLabeled[histogramLabels]
-}
 
-// newCollectorMetrics creates a new set of collector metrics using the specified registry.
-func newCollectorMetrics(registry *prometheus.Registry) *collectorMetrics {
-	return &collectorMetrics{
-		requestsCounter: CounterWithRegistryWith[requestLabels](
-			registry,
-			"http_requests_total",
-			"Total number of incoming HTTP requests.",
-		),
-		inflightGauge: GaugeWithRegistryWith[inflightLabels](
-			registry,
-			"http_requests_inflight", 
-			"Number of incoming HTTP requests currently in flight.",
-		),
-		requestsHistogram: HistogramWithRegistryWith[histogramLabels](
-			registry,
-			"http_request_duration_seconds",
-			"Response latency in seconds for completed incoming HTTP requests.",
-			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
-		),
-	}
-}
 
 // CollectorOpts configures the HTTP request metrics collector.
 type CollectorOpts struct {
@@ -98,9 +71,27 @@ type inflightLabels struct {
 // - http_request_duration_seconds: Response latency in seconds for completed requests
 func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 	// If a custom registry is specified, create metrics for that registry
-	var metrics *collectorMetrics
+	var customRequestsCounter CounterMetricLabeled[requestLabels]
+	var customInflightGauge GaugeMetricLabeled[inflightLabels]
+	var customRequestsHistogram HistogramMetricLabeled[histogramLabels]
+	
 	if opts.Registry != nil {
-		metrics = newCollectorMetrics(opts.Registry)
+		customRequestsCounter = CounterWithRegistryWith[requestLabels](
+			opts.Registry,
+			"http_requests_total",
+			"Total number of incoming HTTP requests.",
+		)
+		customInflightGauge = GaugeWithRegistryWith[inflightLabels](
+			opts.Registry,
+			"http_requests_inflight", 
+			"Number of incoming HTTP requests currently in flight.",
+		)
+		customRequestsHistogram = HistogramWithRegistryWith[histogramLabels](
+			opts.Registry,
+			"http_request_duration_seconds",
+			"Response latency in seconds for completed incoming HTTP requests.",
+			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
+		)
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -118,8 +109,8 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 			}
 			
 			// Use custom metrics if available, otherwise use global metrics
-			if metrics != nil {
-				metrics.inflightGauge.Inc(inflightLabels)
+			if opts.Registry != nil {
+				customInflightGauge.Inc(inflightLabels)
 			} else {
 				inflightGauge.Inc(inflightLabels)
 			}
@@ -133,8 +124,8 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 				duration := time.Since(start).Seconds()
 				
 				// Decrement inflight counter
-				if metrics != nil {
-					metrics.inflightGauge.Dec(inflightLabels)
+				if opts.Registry != nil {
+					customInflightGauge.Dec(inflightLabels)
 				} else {
 					inflightGauge.Dec(inflightLabels)
 				}
@@ -168,16 +159,16 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 						Status:   labels.Status,
 						Endpoint: labels.Endpoint,
 					}
-					if metrics != nil {
-						metrics.requestsHistogram.Observe(duration, histLabels)
+					if opts.Registry != nil {
+						customRequestsHistogram.Observe(duration, histLabels)
 					} else {
 						requestsHistogram.Observe(duration, histLabels)
 					}
 				}
 
 				// Track total number of requests.
-				if metrics != nil {
-					metrics.requestsCounter.Inc(labels)
+				if opts.Registry != nil {
+					customRequestsCounter.Inc(labels)
 				} else {
 					requestsCounter.Inc(labels)
 				}
