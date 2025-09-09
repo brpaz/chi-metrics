@@ -8,7 +8,7 @@ replace github.com/go-chi/metrics => ../
 // replace github.com/golang-cz/devslog => ../../../golang-cz/devslog
 
 require (
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-chi/httplog/v3 v3.2.0
 	github.com/go-chi/httprate v0.15.0
 	github.com/go-chi/metrics v0.0.0-00010101000000-000000000000
