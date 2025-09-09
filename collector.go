@@ -76,22 +76,30 @@ func Collector(opts CollectorOpts) func(next http.Handler) http.Handler {
 	var customRequestsHistogram HistogramMetricLabeled[histogramLabels]
 	
 	if opts.Registry != nil {
-		customRequestsCounter = CounterWithRegistryWith[requestLabels](
-			opts.Registry,
-			"http_requests_total",
-			"Total number of incoming HTTP requests.",
-		)
-		customInflightGauge = GaugeWithRegistryWith[inflightLabels](
-			opts.Registry,
-			"http_requests_inflight", 
-			"Number of incoming HTTP requests currently in flight.",
-		)
-		customRequestsHistogram = HistogramWithRegistryWith[histogramLabels](
-			opts.Registry,
-			"http_request_duration_seconds",
-			"Response latency in seconds for completed incoming HTTP requests.",
-			[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
-		)
+		// Create counter metric vector
+		requestsVec := prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "http_requests_total",
+			Help: "Total number of incoming HTTP requests.",
+		}, getLabelKeys[requestLabels]())
+		opts.Registry.MustRegister(requestsVec)
+		customRequestsCounter = CounterMetricLabeled[requestLabels]{Vec: requestsVec}
+		
+		// Create inflight gauge metric vector
+		inflightVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
+			Name: "http_requests_inflight",
+			Help: "Number of incoming HTTP requests currently in flight.",
+		}, getLabelKeys[inflightLabels]())
+		opts.Registry.MustRegister(inflightVec)
+		customInflightGauge = GaugeMetricLabeled[inflightLabels]{Vec: inflightVec}
+		
+		// Create histogram metric vector
+		histogramVec := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "http_request_duration_seconds",
+			Help:    "Response latency in seconds for completed incoming HTTP requests.",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 25, 50, 100},
+		}, getLabelKeys[histogramLabels]())
+		opts.Registry.MustRegister(histogramVec)
+		customRequestsHistogram = HistogramMetricLabeled[histogramLabels]{Vec: histogramVec}
 	}
 
 	return func(next http.Handler) http.Handler {

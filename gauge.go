@@ -25,7 +25,7 @@ func GaugeWithRegistry(registry *prometheus.Registry, name, help string) GaugeMe
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return GaugeMetric{vec: vec}
+	return GaugeMetric{Vec: vec}
 }
 
 // GaugeWithRegistryWith creates a gauge metric with typed labels using the specified registry.
@@ -41,45 +41,45 @@ func GaugeWithRegistryWith[T any](registry *prometheus.Registry, name, help stri
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return GaugeMetricLabeled[T]{vec: vec}
+	return GaugeMetricLabeled[T]{Vec: vec}
 }
 
 type GaugeMetric struct {
-	vec *prometheus.GaugeVec
+	Vec *prometheus.GaugeVec
 }
 
 func (g *GaugeMetric) Set(value float64) {
-	g.vec.With(prometheus.Labels{}).Set(value)
+	g.Vec.With(prometheus.Labels{}).Set(value)
 }
 
 func (g *GaugeMetric) Add(value float64) {
-	g.vec.With(prometheus.Labels{}).Add(value)
+	g.Vec.With(prometheus.Labels{}).Add(value)
 }
 
 func (g *GaugeMetric) Inc() {
-	g.vec.With(prometheus.Labels{}).Add(1.0)
+	g.Vec.With(prometheus.Labels{}).Add(1.0)
 }
 
 func (g *GaugeMetric) Dec() {
-	g.vec.With(prometheus.Labels{}).Add(-1.0)
+	g.Vec.With(prometheus.Labels{}).Add(-1.0)
 }
 
 type GaugeMetricLabeled[T any] struct {
-	vec *prometheus.GaugeVec
+	Vec *prometheus.GaugeVec
 }
 
 func (g *GaugeMetricLabeled[T]) Set(value float64, labels T) {
-	g.vec.With(getLabelValues(labels)).Set(value)
+	g.Vec.With(getLabelValues(labels)).Set(value)
 }
 
 func (g *GaugeMetricLabeled[T]) Add(value float64, labels T) {
-	g.vec.With(getLabelValues(labels)).Add(value)
+	g.Vec.With(getLabelValues(labels)).Add(value)
 }
 
 func (g *GaugeMetricLabeled[T]) Inc(labels T) {
-	g.vec.With(getLabelValues(labels)).Add(1.0)
+	g.Vec.With(getLabelValues(labels)).Add(1.0)
 }
 
 func (g *GaugeMetricLabeled[T]) Dec(labels T) {
-	g.vec.With(getLabelValues(labels)).Add(-1.0)
+	g.Vec.With(getLabelValues(labels)).Add(-1.0)
 }

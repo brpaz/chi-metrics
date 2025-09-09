@@ -25,7 +25,7 @@ func CounterWithRegistry(registry *prometheus.Registry, name string, help string
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return CounterMetric{vec: vec}
+	return CounterMetric{Vec: vec}
 }
 
 // CounterWithRegistryWith creates a counter metric with typed labels using the specified registry.
@@ -41,29 +41,29 @@ func CounterWithRegistryWith[T any](registry *prometheus.Registry, name string, 
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return CounterMetricLabeled[T]{vec: vec}
+	return CounterMetricLabeled[T]{Vec: vec}
 }
 
 type CounterMetric struct {
-	vec *prometheus.CounterVec
+	Vec *prometheus.CounterVec
 }
 
 func (c *CounterMetric) Inc() {
-	c.vec.With(prometheus.Labels{}).Inc()
+	c.Vec.With(prometheus.Labels{}).Inc()
 }
 
 func (c *CounterMetric) Add(value float64) {
-	c.vec.With(prometheus.Labels{}).Add(value)
+	c.Vec.With(prometheus.Labels{}).Add(value)
 }
 
 type CounterMetricLabeled[T any] struct {
-	vec *prometheus.CounterVec
+	Vec *prometheus.CounterVec
 }
 
 func (c *CounterMetricLabeled[T]) Inc(labels T) {
-	c.vec.With(getLabelValues(labels)).Inc()
+	c.Vec.With(getLabelValues(labels)).Inc()
 }
 
 func (c *CounterMetricLabeled[T]) Add(value float64, labels T) {
-	c.vec.With(getLabelValues(labels)).Add(value)
+	c.Vec.With(getLabelValues(labels)).Add(value)
 }

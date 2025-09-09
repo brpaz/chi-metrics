@@ -26,7 +26,7 @@ func HistogramWithRegistry(registry *prometheus.Registry, name, help string, buc
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return HistogramMetric{vec: vec}
+	return HistogramMetric{Vec: vec}
 }
 
 // HistogramWithRegistryWith creates a histogram metric with typed labels using the specified registry.
@@ -43,22 +43,22 @@ func HistogramWithRegistryWith[T any](registry *prometheus.Registry, name, help 
 	} else {
 		prometheus.MustRegister(vec)
 	}
-	return HistogramMetricLabeled[T]{vec: vec}
+	return HistogramMetricLabeled[T]{Vec: vec}
 }
 
 type HistogramMetric struct {
-	vec *prometheus.HistogramVec
+	Vec *prometheus.HistogramVec
 }
 
 func (h *HistogramMetric) Observe(value float64) {
-	h.vec.With(prometheus.Labels{}).Observe(value)
+	h.Vec.With(prometheus.Labels{}).Observe(value)
 }
 
 // HistogramMetric represents a histogram metric with typed labels
 type HistogramMetricLabeled[T any] struct {
-	vec *prometheus.HistogramVec
+	Vec *prometheus.HistogramVec
 }
 
 func (h *HistogramMetricLabeled[T]) Observe(value float64, labels T) {
-	h.vec.With(getLabelValues(labels)).Observe(value)
+	h.Vec.With(getLabelValues(labels)).Observe(value)
 }
