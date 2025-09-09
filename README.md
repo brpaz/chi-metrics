@@ -113,8 +113,8 @@ func main() {
 		Proto:    true,
 	}))
 
-	// Serve metrics from custom registry
-	r.Handle("/metrics", metrics.HandlerWithRegistry(customRegistry))
+	// Serve metrics from default registry (custom registries use Collector only)
+	r.Handle("/metrics", metrics.Handler())
 
 	// Create metrics in the custom registry
 	counter := metrics.CounterWithRegistry(customRegistry, "app_requests_total", "Total app requests")
@@ -161,19 +161,14 @@ func multipleRegistriesExample() {
 	// Infrastructure metrics registry  
 	infraRegistry := prometheus.NewRegistry()
 
-	// Business metrics
+	// Business metrics - use with Collector middleware
 	businessCounter := metrics.CounterWithRegistry(businessRegistry, "sales_total", "Total sales")
 	
-	// Infrastructure metrics
+	// Infrastructure metrics - use with Collector middleware
 	infraGauge := metrics.GaugeWithRegistry(infraRegistry, "cpu_usage", "CPU usage")
 
-	// Separate handlers for different registries
-	businessHandler := metrics.HandlerWithRegistry(businessRegistry)
-	infraHandler := metrics.HandlerWithRegistry(infraRegistry)
-	
-	// Mount at different endpoints
-	r.Handle("/business-metrics", businessHandler)
-	r.Handle("/infra-metrics", infraHandler)
+	// Use different registries in different routers/middleware
+	// The metrics will be collected in their respective registries via Collector middleware
 }
 ```
 
@@ -189,7 +184,6 @@ All metric creation functions have `*WithRegistry` variants:
 - `GaugeWithRegistryWith[T any](registry *prometheus.Registry, name, help string) GaugeMetricLabeled[T]`
 - `HistogramWithRegistry(registry *prometheus.Registry, name, help string, buckets []float64) HistogramMetric`
 - `HistogramWithRegistryWith[T any](registry *prometheus.Registry, name, help string, buckets []float64) HistogramMetricLabeled[T]`
-- `HandlerWithRegistry(registry *prometheus.Registry) http.Handler`
 
 #### Configuration Options
 

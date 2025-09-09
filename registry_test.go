@@ -3,7 +3,6 @@ package metrics
 import (
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -206,58 +205,7 @@ func TestCustomRegistryHistogramWithLabels(t *testing.T) {
 	}
 }
 
-func TestCustomRegistryHandler(t *testing.T) {
-	registry := prometheus.NewRegistry()
 
-	// Create a metric in the custom registry
-	counter := CounterWithRegistry(registry, "test_handler_counter", "Test counter for handler")
-	counter.Inc()
-
-	// Create handler with custom registry
-	handler := HandlerWithRegistry(registry)
-
-	// Test the handler
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	resp := w.Result()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status code 200, got %d", resp.StatusCode)
-	}
-
-	body := w.Body.String()
-	if !strings.Contains(body, "test_handler_counter") {
-		t.Errorf("Expected response to contain 'test_handler_counter', but it didn't. Body: %s", body)
-	}
-
-	if !strings.Contains(body, "1") {
-		t.Errorf("Expected response to contain counter value '1', but it didn't. Body: %s", body)
-	}
-}
-
-func TestCustomRegistryHandlerWithNil(t *testing.T) {
-	// Test that HandlerWithRegistry(nil) behaves like Handler()
-	defaultHandler := Handler()
-	nilRegistryHandler := HandlerWithRegistry(nil)
-
-	// Both should work (though we can't easily test they're identical)
-	req := httptest.NewRequest("GET", "/metrics", nil)
-	
-	w1 := httptest.NewRecorder()
-	defaultHandler.ServeHTTP(w1, req)
-	
-	w2 := httptest.NewRecorder()
-	nilRegistryHandler.ServeHTTP(w2, req)
-
-	// Both should return 200 OK
-	if w1.Result().StatusCode != http.StatusOK {
-		t.Errorf("Default handler returned status %d", w1.Result().StatusCode)
-	}
-	if w2.Result().StatusCode != http.StatusOK {
-		t.Errorf("Nil registry handler returned status %d", w2.Result().StatusCode)
-	}
-}
 
 func TestNilRegistryFallback(t *testing.T) {
 	// Test that nil registry falls back to default registry behavior

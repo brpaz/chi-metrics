@@ -63,8 +63,8 @@ func customRegistryExample() {
 		Proto:    true,
 	}))
 
-	// Use handler with custom registry
-	r.Handle("/metrics", metrics.HandlerWithRegistry(customRegistry))
+	// Use handler from default registry (custom registry metrics collected via Collector)
+	r.Handle("/metrics", metrics.Handler())
 
 	// Create metrics in the custom registry
 	counter := metrics.CounterWithRegistry(customRegistry, "custom_app_requests_total", "Total custom app requests")
@@ -104,7 +104,7 @@ func separateRegistriesExample() {
 		Host:     false,
 		Proto:    true,
 	}))
-	appRouter.Handle("/metrics", metrics.HandlerWithRegistry(appRegistry))
+	appRouter.Handle("/metrics", metrics.Handler())
 
 	// Infrastructure server with infra-specific metrics
 	infraRouter := chi.NewRouter()
@@ -113,7 +113,7 @@ func separateRegistriesExample() {
 		Host:     true,
 		Proto:    false,
 	}))
-	infraRouter.Handle("/metrics", metrics.HandlerWithRegistry(infraRegistry))
+	infraRouter.Handle("/metrics", metrics.Handler())
 
 	// Create app-specific metrics
 	appCounter := metrics.CounterWithRegistry(appRegistry, "business_transactions_total", "Business transactions")
@@ -172,13 +172,12 @@ func migrationExample() {
 	newCounter := metrics.CounterWithRegistry(customRegistry, "new_metric", "New metric in custom registry")
 	newCounter.Inc()
 
-	// Step 3: Both registries can coexist
+	// Step 3: Registries are isolated via Collector middleware
+	// Only the default handler is available
 	defaultHandler := metrics.Handler()              // serves default registry
-	customHandler := metrics.HandlerWithRegistry(customRegistry) // serves custom registry
 
 	fmt.Printf("Default handler type: %T\n", defaultHandler)
-	fmt.Printf("Custom handler type: %T\n", customHandler)
-	fmt.Println("Both registries work independently!")
+	fmt.Println("Custom registries work independently via Collector middleware!")
 }
 
 // Demonstrates nil registry behavior (falls back to default)
@@ -190,11 +189,9 @@ func nilRegistryExample() {
 	counter2 := metrics.CounterWithRegistry(nil, "example_counter_2", "Example counter 2")
 
 	handler1 := metrics.Handler()
-	handler2 := metrics.HandlerWithRegistry(nil)
 
 	fmt.Printf("Counter1 type: %T\n", counter1)
 	fmt.Printf("Counter2 type: %T\n", counter2)
 	fmt.Printf("Handler1 type: %T\n", handler1)
-	fmt.Printf("Handler2 type: %T\n", handler2)
 	fmt.Println("Nil registry functions are equivalent to original functions!")
 }
